@@ -107,12 +107,12 @@ struct CorrelationEngine::Impl {
             a.mitre_id, a.description,
             a.src_ip, a.severity
         });
-        ip_campaign_idx[a.src_ip.value] = c.id.value;
+        ip_campaign_idx.insert_or_assign(a.src_ip.value, c.id.value);
         campaigns.push_back(std::move(c));
     }
 
     void update_ueba(const CorrelatedAlert& a) noexcept {
-        auto& p        = ueba[a.src_ip.value];
+        auto& p        = ueba.try_emplace(a.src_ip.value).first->second;
         p.ip           = a.src_ip;
         p.alert_count_24h++;
         p.last_seen_us = a.timestamp_us;
@@ -228,8 +228,8 @@ Attribution CorrelationEngine::attribute_actor(
     for (const auto& mid : camp->mitre_ids)
         for (std::size_t i = 0; i < ACTOR_SIG_COUNT; ++i)
             if (mid.value == ACTOR_SIGS[i].mitre_id) {
-                scores[ACTOR_SIGS[i].actor]++;
-                matched[ACTOR_SIGS[i].actor].push_back(mid);
+                scores.try_emplace(ACTOR_SIGS[i].actor, 0).first->second++;
+                matched.try_emplace(ACTOR_SIGS[i].actor).first->second.push_back(mid);
             }
     if (scores.empty()) return {};
     std::string best; int best_score = 0;

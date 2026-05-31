@@ -80,7 +80,7 @@ struct DetectionEngine::Impl {
 
     bool check_threshold(const DetectionRule& rule) noexcept {
         if (rule.threshold == 0) return true;
-        auto& tc = thresholds[rule.id.value];
+        auto& tc = thresholds.try_emplace(rule.id.value).first->second;
         std::uint64_t window_us =
             static_cast<std::uint64_t>(rule.window_sec) * 1000000ULL;
         std::uint64_t now = now_us();
@@ -315,9 +315,9 @@ void DetectionEngine::suppress_ip(
     std::chrono::seconds ttl) noexcept {
     if (!impl_) return;
     std::lock_guard lock(impl_->mtx);
-    impl_->suppressed_ips[std::string(ip)] = {
+    impl_->suppressed_ips.insert_or_assign(std::string(ip), SuppressEntry{
         now_us() + static_cast<std::uint64_t>(ttl.count()) * 1000000ULL
-    };
+    });
 }
 
 void DetectionEngine::suppress_rule(
