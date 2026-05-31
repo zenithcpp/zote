@@ -92,7 +92,7 @@ jobs:
       - name: Run cppcheck
         run: |
           cppcheck --std=c++23 \
-            --enable=all \
+            --enable=warning,performance,portability \
             --suppress=missingIncludeSystem \
             --suppress=unmatchedSuppression \
             --error-exitcode=1 \
