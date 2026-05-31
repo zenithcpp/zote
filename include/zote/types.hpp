@@ -63,8 +63,8 @@ enum class ZoteError : std::uint8_t {
 };
 
 // Convenience alias — use throughout ZOTE public API
-template<typename T>
 #if defined(__cpp_lib_expected) && __cpp_lib_expected >= 202211L
+template<typename T>
 using Result = std::expected<T, ZoteError>;
 #endif
 
