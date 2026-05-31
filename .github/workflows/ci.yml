@@ -24,9 +24,9 @@ jobs:
             cc: gcc-14
             cxx: g++-14
           - os: ubuntu-24.04
-            compiler: clang-17
-            cc: clang-17
-            cxx: clang++-17
+            compiler: clang-18
+            cc: clang-18
+            cxx: clang++-18
 
     steps:
       - name: Checkout
@@ -35,7 +35,7 @@ jobs:
       - name: Install compiler (${{ matrix.compiler }})
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y ${{ matrix.cc }} ${{ matrix.cxx }} cmake ninja-build
+          sudo apt-get install -y ${{ matrix.cc }} ${{ matrix.cxx }} cmake ninja-build || sudo apt-get install -y clang-18 cmake ninja-build
 
       - name: Install Catch2
         run: |
