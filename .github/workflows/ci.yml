@@ -1,0 +1,131 @@
+name: ZOTE CI
+
+on:
+  push:
+    branches: [ main, dev ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    name: Build and Test (${{ matrix.os }}, ${{ matrix.compiler }})
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            compiler: gcc-13
+            cc: gcc-13
+            cxx: g++-13
+          - os: ubuntu-24.04
+            compiler: gcc-14
+            cc: gcc-14
+            cxx: g++-14
+          - os: ubuntu-24.04
+            compiler: clang-17
+            cc: clang-17
+            cxx: clang++-17
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install compiler (${{ matrix.compiler }})
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ${{ matrix.cc }} ${{ matrix.cxx }} cmake ninja-build
+
+      - name: Install Catch2
+        run: |
+          sudo apt-get install -y catch2 || true
+          # Fallback: build from source if package not available
+          if ! dpkg -l | grep -q catch2; then
+            git clone --depth 1 --branch v3.7.1 \
+              https://github.com/catchorg/Catch2.git /tmp/catch2
+            cmake -S /tmp/catch2 -B /tmp/catch2/build \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DBUILD_TESTING=OFF
+            sudo cmake --build /tmp/catch2/build --target install -j$(nproc)
+          fi
+
+      - name: Configure
+        env:
+          CC: ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_CXX_STANDARD=23 \
+            -G Ninja
+
+      - name: Build
+        run: cmake --build build -j$(nproc)
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Test report
+        if: always()
+        run: |
+          ./build/test_zote --reporter junit > test_results.xml || true
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.os }}-${{ matrix.compiler }}
+          path: test_results.xml
+
+  static-analysis:
+    name: Static Analysis
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y cppcheck cmake
+
+      - name: Run cppcheck
+        run: |
+          cppcheck --std=c++23 \
+            --enable=all \
+            --suppress=missingIncludeSystem \
+            --suppress=unmatchedSuppression \
+            --error-exitcode=1 \
+            -I include \
+            src/
+
+  sanitizers:
+    name: Sanitizers (ASan + UBSan)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y g++-13 cmake ninja-build catch2 || true
+
+      - name: Configure with sanitizers
+        env:
+          CC: gcc-13
+          CXX: g++-13
+        run: |
+          cmake -S . -B build-san \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_CXX_STANDARD=23 \
+            -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer" \
+            -G Ninja
+
+      - name: Build
+        run: cmake --build build-san -j$(nproc)
+
+      - name: Test under sanitizers
+        env:
+          ASAN_OPTIONS: detect_leaks=1
+          UBSAN_OPTIONS: print_stacktrace=1
+        run: ctest --test-dir build-san --output-on-failure
